@@ -7,19 +7,86 @@ output:
 
 
 ## Loading and preprocessing the data
+```{r}
+act <- read.csv("activity/activity.csv")
+summary(act)
+```
 
-
+In fact the interval column is the time of day at 5 minute intervals using a 24
+hour clock. So, combine the 2 columns into a date-time representation.
+```{r}
+daytime <- strptime( 
+        paste( act$date, sprintf( "%04d", act$interval)), "%Y-%m-%d %H%M")
+# combine new representaion of time and original data
+act <- cbind( act, daytime)
+```
 
 ## What is mean total number of steps taken per day?
+```{r}
+ per_day <- aggregate( steps ~ date, data=act, FUN=sum)
+```
+The mean steps taken per day is `r mean(per_day$steps)`.
+The median steps taken per day is `r median(per_day$steps)`
 
+The following plot shows the histogram of mean steps per day.
+```{r}
+ hist( per_day$steps)
+```
 
 
 ## What is the average daily activity pattern?
+```{r}
+library(dplyr)
+by_int <- group_by( act, interval)
+mean_by_int <- summarize( by_int, ave = mean(steps, na.rm=TRUE))
+```
 
-
+The plot
+```{r}
+plot( mean_by_int$ave, type="l", axes=FALSE, xlab="", ylab="" )
+# want time of day labels on x axis
+inttimes <- factor( strftime(  act$daytime, "%H:%M") )
+axis( 1, c( seq(1, 288, 48), 289),
+         c( as.character(inttimes[seq(1, 288, 48)]), "24:00"))
+# use default for y axis
+axis(2)
+# label the axes
+title( xlab = "Time of Day", ylab = "Average Steps",
+       main = "Daily Step Activity" )
+```
 
 ## Imputing missing values
+When a sample is missing, use the mean value for the associated time of day.
+```{r}
+# find missing observations
+missing_rows = which( !complete.cases(act))
+# what time of day do they correspond to
+missing_tod = unique( act$interval[missing_rows])
+# create new data set
+newact <- act
+# loop
+for (k in seq_along(missing_tod) ) {
+        n <- which( is.na(newact$steps) & newact$interval==missing_tod[k])
+        newact$steps[n] <- rep( mean_by_int$ave[k], length(n))
+        }
+```
 
+New mean, median, and histogram
+## What is mean total number of steps taken per day?
+```{r}
+ new_per_day <- aggregate( steps ~ date, data=newact, FUN=sum)
+```
+The mean steps taken per day is `r mean(new_per_day$steps)`.
+The median steps taken per day is `r median(new_per_day$steps)`
 
+The following plot shows the histogram of mean steps per day.
+```{r}
+ #par( mfrow=c(1,2))
+ #hist( per_day$steps, border="red",  ylim=c(0,40), lty=2)
+ hist( new_per_day$steps, border="red", axes=FALSE, xlab="", ylab="", main="", ylim=c(0,40))
+ par( new=TRUE)
+ hist( per_day$steps, border="blue", ylim=c(0,40), lty=2 )
+ par(new=FALSE)
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
