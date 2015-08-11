@@ -17,8 +17,10 @@ hour clock. So, combine the 2 columns into a date-time representation.
 ```{r}
 daytime <- strptime( 
         paste( act$date, sprintf( "%04d", act$interval)), "%Y-%m-%d %H%M")
+# generate a "continuous" time vector of minutes into day
+daymin <- trunc(act$interval/100)*60 + act$interval-100*trunc(act$interval/100) 
 # combine new representaion of time and original data
-act <- cbind( act, daytime)
+act <- cbind( act, daytime, daymin)
 ```
 
 ## What is mean total number of steps taken per day?
@@ -64,7 +66,7 @@ missing_rows = which( !complete.cases(act))
 missing_tod = unique( act$interval[missing_rows])
 # create new data set
 newact <- act
-# loop
+# loop over time of day intervals and fill in missing data
 for (k in seq_along(missing_tod) ) {
         n <- which( is.na(newact$steps) & newact$interval==missing_tod[k])
         newact$steps[n] <- rep( mean_by_int$ave[k], length(n))
@@ -79,10 +81,8 @@ New mean, median, and histogram
 The mean steps taken per day is `r mean(new_per_day$steps)`.
 The median steps taken per day is `r median(new_per_day$steps)`
 
-The following plot shows the histogram of mean steps per day.
+The following plot compares the histogram of mean steps per day with/without imputing.
 ```{r}
- #par( mfrow=c(1,2))
- #hist( per_day$steps, border="red",  ylim=c(0,40), lty=2)
  hist( new_per_day$steps, border="red", axes=FALSE, xlab="", ylab="", main="", ylim=c(0,40))
  par( new=TRUE)
  hist( per_day$steps, border="blue", ylim=c(0,40), lty=2 )
@@ -90,3 +90,30 @@ The following plot shows the histogram of mean steps per day.
 ```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+wd <- as.numeric(strftime(newact$daytime, '%u'))  # days of week 1 to 7, 1: MON
+newact$weekd <- "Week End"
+newact$weekd[wd<6] <- "Week Day"
+newact$weekd <- factor(newact$weekd)
+by_int_day = group_by( newact, daymin, weekd)
+mean_by_int_by_day <- summarize( by_int_day, ave=mean(steps))
+```
+Plot this
+```{r}
+library(lattice)
+```
+The plot
+```{r}
+xyplot( ave ~ daymin|  weekd, data = mean_by_int_by_day, 
+        layout=c(1,2), type="l", 
+        scales = list( 
+                x=list( at=seq(0,1440,240), 
+                        limits = c(0, 1440),
+                        labels=c( as.character(inttimes[seq(1, 288, 48)]), "24:00"))
+                ),
+        xlab="Time of Day",
+        ylab="Average Number of Steps",
+        main="Average Daily Distribution of Steps for Week Day and Weekend"
+        )
+```
+
