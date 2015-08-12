@@ -7,43 +7,75 @@ output:
 
 
 ## Loading and preprocessing the data
+The data file is in csv format. Load it accordingly. Take a quick look at the
+data with the head() and tail() functions.
 ```{r}
 act <- read.csv("activity/activity.csv")
-summary(act)
+head(act)
+tail(act)
 ```
-
-In fact the interval column is the time of day at 5 minute intervals using a 24
-hour clock. So, combine the 2 columns into a date-time representation.
+The interval column is incrementing by 5; however, the integer value represented
+is the digital clock reading of a 24-hour clock. A sample day roll-over 
+(2355 to 0) is shown below
+as well as an example hour roll-over (55 to 100).
 ```{r}
-daytime <- strptime( 
-        paste( act$date, sprintf( "%04d", act$interval)), "%Y-%m-%d %H%M")
+act[287:290,]
+act[299:303,]
+```
+For convenience, a continous representation of "interval" in minutes is calculated
+and added to the data frame. The day-time date is built also. These 
+quantities have practical use later in the analysis.
+```{r}
 # generate a "continuous" time vector of minutes into day
 daymin <- trunc(act$interval/100)*60 + act$interval-100*trunc(act$interval/100) 
+# construct the date
+daytime <- strptime( 
+        paste( act$date, sprintf( "%04d", act$interval)), "%Y-%m-%d %H%M")
 # combine new representaion of time and original data
 act <- cbind( act, daytime, daymin)
 ```
 
-## What is mean total number of steps taken per day?
+## Daily Steps
+Frist, the total number of steps per day is calculated and tabulated in the
+per_day data frame.
 ```{r}
  per_day <- aggregate( steps ~ date, data=act, FUN=sum)
 ```
-The mean steps taken per day is `r mean(per_day$steps)`.
-The median steps taken per day is `r median(per_day$steps)`
 
-The following plot shows the histogram of mean steps per day.
+The following plot shows the histogram of total steps per day.
 ```{r}
- hist( per_day$steps)
+ hist( per_day$steps, xlab="Steps per Day", main="Total Steps per Day")
+ abline( v=mean(per_day$steps), lty=1, col="red", lwd=2)
+ abline( v=median(per_day$steps), lty=2, col='blue', lwd=2)
+legend( "topleft", 
+        c( sprintf( "Mean:   %0.1f", mean(per_day$steps)),
+           sprintf( "Median: %0.1f", median(per_day$steps)) ),
+        lty = c( 1, 2), lwd = c(2, 2), col=c("red", "blue"))
+```
+
+The mean of steps taken per day is:
+```{r}
+mean(per_day$steps)
+```
+The median of steps taken per day is:
+```{r}
+median(per_day$steps)
 ```
 
 
-## What is the average daily activity pattern?
+## Average Daily Activity Pattern
+The following implements the calculation of the average number of steps over all
+days of the steps taken within the 5-minute intervals. First load library.
 ```{r}
 library(dplyr)
+```
+Perform calculation (remove missing values)
+```{r}
 by_int <- group_by( act, interval)
 mean_by_int <- summarize( by_int, ave = mean(steps, na.rm=TRUE))
 ```
-
-The plot
+### Plot of Average Steps versus Time Interval
+Construct the plot of average steps versus interval (e.g. time of day)
 ```{r}
 plot( mean_by_int$ave, type="l", axes=FALSE, xlab="", ylab="" )
 # want time of day labels on x axis
@@ -57,8 +89,22 @@ title( xlab = "Time of Day", ylab = "Average Steps",
        main = "Daily Step Activity" )
 ```
 
+### Peak Activity
+The peak in activity (around 8:30 estimated by viewing the plot) is confirmed by
+finding the maximum average steps within the mean_by_int data frame. Display
+the frame associated with the maximum.
+```{r}
+mean_by_int[ mean_by_int$ave==max(mean_by_int$ave),]
+```
+
 ## Imputing missing values
-When a sample is missing, use the mean value for the associated time of day.
+There are missing observations in the data set. The number if missing rows is
+given below.
+```{r}
+length( which(!complete.cases(act)))
+```
+When a sample is missing, the mean value for the associated time of day will be
+used to fill it in.
 ```{r}
 # find missing observations
 missing_rows = which( !complete.cases(act))
@@ -73,23 +119,42 @@ for (k in seq_along(missing_tod) ) {
         }
 ```
 
-New mean, median, and histogram
-## What is mean total number of steps taken per day?
+## Mean and Median with Imputed Data
+The average steps per day are re-calculated using the imputed data. Since the
+missing data was filled in with average data, the overall
+average should match the original calculation where missing data was
+ignored.
 ```{r}
  new_per_day <- aggregate( steps ~ date, data=newact, FUN=sum)
 ```
-The mean steps taken per day is `r mean(new_per_day$steps)`.
-The median steps taken per day is `r median(new_per_day$steps)`
+The mean of steps taken per day is:
+```{r}
+mean(new_per_day$steps)
+```
+The median of steps taken per day is:
+```{r}
+median(new_per_day$steps)
+```
 
 The following plot compares the histogram of mean steps per day with/without imputing.
 ```{r}
  hist( new_per_day$steps, border="red", axes=FALSE, xlab="", ylab="", main="", ylim=c(0,40))
  par( new=TRUE)
- hist( per_day$steps, border="blue", ylim=c(0,40), lty=2 )
+ hist( per_day$steps, border="blue", ylim=c(0,40), lty=2, 
+       xlab = "Time of Day", main= "Daily Step Activity")
+ legend( "topleft", 
+        c( sprintf( "Missing Data Imputed"),
+           sprintf( "Missing Data Ignored") ),
+        lty = c( 1, 2), col=c("red", "blue"))
  par(new=FALSE)
 ```
 
-## Are there differences in activity patterns between weekdays and weekends?
+## Comparison in activity patterns between weekdays and weekends
+To compare the activities, the (imputed) data set is factored by week-day/week-end.
+To do this, the numerical
+equivalent of week day is extracted from the daytime vector determined earlier.
+Then, the data is grouped and
+summarized accordingly to get the week day and week end averages.
 ```{r}
 wd <- as.numeric(strftime(newact$daytime, '%u'))  # days of week 1 to 7, 1: MON
 newact$weekd <- "Week End"
@@ -98,11 +163,17 @@ newact$weekd <- factor(newact$weekd)
 by_int_day = group_by( newact, daymin, weekd)
 mean_by_int_by_day <- summarize( by_int_day, ave=mean(steps))
 ```
-Plot this
-```{r}
+Compare average week-day and week-end stepping activity using panel plotting
+methods from lattice library (start by loading it)
+```{r loadlattice, results="hide"}
 library(lattice)
 ```
-The plot
+The plot shows that the subject's week-day diurnal activities follow a more 
+defined pattern than for the week-end. Night time is generally quiet. The subject
+appears to get up around 6:00 on week-days, followed perhaps by same physical
+exercise around 8:30. The week-end rise time is variable since there is no sharp
+increase in the morning hours. Also, the subject tends to stay up a bit later on
+the week-ends.
 ```{r}
 xyplot( ave ~ daymin|  weekd, data = mean_by_int_by_day, 
         layout=c(1,2), type="l", 
